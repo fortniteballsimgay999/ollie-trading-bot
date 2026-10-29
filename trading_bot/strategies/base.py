@@ -10,9 +10,9 @@ import numpy as np
 class Signal:
     timestamp: pd.Timestamp
     ticker: str
-    action: str
+    action: str  # BUY, SELL, HOLD
     price: float
-    strength: float = 1.0
+    strength: float = 1.0  # 0-1
     reason: str = ""
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
@@ -26,7 +26,7 @@ class Position:
     entry_time: pd.Timestamp
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
-    side: str = "long"
+    side: str = "long"  # long only for v1
 
     def unrealized_pnl(self, current_price: float) -> float:
         return (current_price - self.entry_price) * self.shares
@@ -60,6 +60,8 @@ class PortfolioState:
 
 
 class Strategy(ABC):
+    """Abstract base for all trading strategies."""
+
     name: str = "Base"
     description: str = ""
 
@@ -72,12 +74,14 @@ class Strategy(ABC):
 
     @abstractmethod
     def generate_signals(self, data: pd.DataFrame, ticker: str) -> List[Signal]:
+        """Return list of signals for the full history."""
         ...
 
     def required_columns(self) -> List[str]:
         return ["Open", "High", "Low", "Close", "Volume"]
 
     def prepare(self, data: pd.DataFrame) -> pd.DataFrame:
+        """Optional indicator pre-computation. Override in subclasses."""
         return data.copy()
 
 
@@ -88,6 +92,10 @@ def position_size(
     stop_distance_pct: float = 0.02,
     max_position_pct: float = 0.25,
 ) -> float:
+    """
+    Risk-based position sizing.
+    risk_pct of equity at risk if stop is hit.
+    """
     if price <= 0 or stop_distance_pct <= 0:
         return 0.0
     risk_amount = equity * risk_pct
@@ -101,23 +109,32 @@ def compute_metrics(
     trades: List[Trade],
     risk_free_rate: float = 0.05,
 ) -> Dict[str, float]:
+    """Standard performance metrics from equity curve and trade list."""
     if not equity_curve or len(equity_curve) < 2:
         return {}
+
     eq = np.array(equity_curve, dtype=float)
     rets = np.diff(eq) / eq[:-1]
     rets = rets[np.isfinite(rets)]
+
     total_return = (eq[-1] / eq[0] - 1) * 100
+    # Approximate annualization assuming daily bars
     n_days = len(eq)
     years = max(n_days / 252, 1e-6)
     cagr = ((eq[-1] / eq[0]) ** (1 / years) - 1) * 100 if eq[0] > 0 else 0.0
+
     vol = np.std(rets) * np.sqrt(252) * 100 if len(rets) > 1 else 0.0
     sharpe = 0.0
     if len(rets) > 1 and np.std(rets) > 0:
         excess = rets - (risk_free_rate / 252)
         sharpe = np.mean(excess) / np.std(rets) * np.sqrt(252)
+
+    # Max drawdown
     peak = np.maximum.accumulate(eq)
     dd = (eq - peak) / peak
     max_dd = float(np.min(dd) * 100) if len(dd) else 0.0
+
+    # Trade stats
     closed = [t for t in trades if t.side == "SELL"]
     wins = [t for t in closed if t.pnl > 0]
     losses = [t for t in closed if t.pnl <= 0]
@@ -129,6 +146,7 @@ def compute_metrics(
         if losses and sum(t.pnl for t in losses) != 0
         else (float("inf") if wins else 0.0)
     )
+
     return {
         "total_return_pct": round(total_return, 2),
         "cagr_pct": round(cagr, 2),

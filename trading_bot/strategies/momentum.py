@@ -6,6 +6,12 @@ from .base import Strategy, Signal
 
 
 class DonchianBreakout(Strategy):
+    """
+    Donchian channel breakout (Turtle-style).
+    Buy N-day high breakout; exit on M-day low.
+    Strong evidence in trend-following literature.
+    """
+
     name = "Donchian Breakout"
     description = "Buy N-day high breakout; exit on M-day low (Turtle system)."
 
@@ -16,11 +22,16 @@ class DonchianBreakout(Strategy):
 
     def prepare(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
-        e, x, a = int(self.params["entry_period"]), int(self.params["exit_period"]), int(self.params["atr_period"])
+        e = int(self.params["entry_period"])
+        x = int(self.params["exit_period"])
+        a = int(self.params["atr_period"])
         df["entry_high"] = df["High"].rolling(e).max().shift(1)
         df["exit_low"] = df["Low"].rolling(x).min().shift(1)
         high, low, close = df["High"], df["Low"], df["Close"]
-        tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
+        tr = pd.concat(
+            [high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()],
+            axis=1,
+        ).max(axis=1)
         df["atr"] = tr.rolling(a).mean()
         return df
 
@@ -35,17 +46,39 @@ class DonchianBreakout(Strategy):
             if not in_pos and row["Close"] > row["entry_high"]:
                 atr = float(row["atr"]) if not pd.isna(row["atr"]) else 0.0
                 sl = float(row["Close"] - self.params["atr_stop"] * atr) if atr else None
-                signals.append(Signal(df.index[i], ticker, "BUY", float(row["Close"]), 1.0,
-                                      f"Donchian {self.params['entry_period']}-day high breakout", sl))
+                signals.append(
+                    Signal(
+                        timestamp=df.index[i],
+                        ticker=ticker,
+                        action="BUY",
+                        price=float(row["Close"]),
+                        strength=1.0,
+                        reason=f"Donchian {self.params['entry_period']}-day high breakout",
+                        stop_loss=sl,
+                    )
+                )
                 in_pos = True
             elif in_pos and row["Close"] < row["exit_low"]:
-                signals.append(Signal(df.index[i], ticker, "SELL", float(row["Close"]), 1.0,
-                                      f"Donchian {self.params['exit_period']}-day low exit"))
+                signals.append(
+                    Signal(
+                        timestamp=df.index[i],
+                        ticker=ticker,
+                        action="SELL",
+                        price=float(row["Close"]),
+                        strength=1.0,
+                        reason=f"Donchian {self.params['exit_period']}-day low exit",
+                    )
+                )
                 in_pos = False
         return signals
 
 
 class RateOfChangeMomentum(Strategy):
+    """
+    Cross-sectional style time-series momentum via rate of change.
+    Long when ROC > threshold and rising; exit when ROC turns negative.
+    """
+
     name = "ROC Momentum"
     description = "Long when N-day rate of change exceeds threshold; exit on ROC < 0."
 
@@ -56,7 +89,8 @@ class RateOfChangeMomentum(Strategy):
 
     def prepare(self, data: pd.DataFrame) -> pd.DataFrame:
         df = data.copy()
-        df["roc"] = df["Close"].pct_change(int(self.params["period"]))
+        p = int(self.params["period"])
+        df["roc"] = df["Close"].pct_change(p)
         return df
 
     def generate_signals(self, data: pd.DataFrame, ticker: str) -> List[Signal]:
@@ -69,11 +103,27 @@ class RateOfChangeMomentum(Strategy):
             if pd.isna(row["roc"]):
                 continue
             if not in_pos and row["roc"] > thr:
-                signals.append(Signal(df.index[i], ticker, "BUY", float(row["Close"]),
-                                      min(1.0, abs(row["roc"]) / (thr * 2)),
-                                      f"ROC {self.params['period']}d = {row['roc']*100:.1f}%"))
+                signals.append(
+                    Signal(
+                        timestamp=df.index[i],
+                        ticker=ticker,
+                        action="BUY",
+                        price=float(row["Close"]),
+                        strength=min(1.0, abs(row["roc"]) / (thr * 2)),
+                        reason=f"ROC {self.params['period']}d = {row['roc']*100:.1f}%",
+                    )
+                )
                 in_pos = True
             elif in_pos and row["roc"] < 0:
-                signals.append(Signal(df.index[i], ticker, "SELL", float(row["Close"]), 1.0, "ROC turned negative"))
+                signals.append(
+                    Signal(
+                        timestamp=df.index[i],
+                        ticker=ticker,
+                        action="SELL",
+                        price=float(row["Close"]),
+                        strength=1.0,
+                        reason="ROC turned negative",
+                    )
+                )
                 in_pos = False
         return signals

@@ -1,0 +1,26 @@
+//@version=5
+strategy("olliE MA Crossover", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.1)
+
+fastLen = input.int(50, "Fast MA", minval=1)
+slowLen = input.int(200, "Slow MA", minval=2)
+maType  = input.string("SMA", "MA Type", options=["SMA", "EMA"])
+useWebhook = input.bool(true, "Send webhook JSON on order")
+
+fastMA = maType == "EMA" ? ta.ema(close, fastLen) : ta.sma(close, fastLen)
+slowMA = maType == "EMA" ? ta.ema(close, slowLen) : ta.sma(close, slowLen)
+plot(fastMA, "Fast", color=color.new(color.aqua, 0))
+plot(slowMA, "Slow", color=color.new(color.orange, 0))
+
+longCond  = ta.crossover(fastMA, slowMA)
+shortCond = ta.crossunder(fastMA, slowMA)
+if longCond
+    strategy.entry("Long", strategy.long)
+if shortCond
+    strategy.close("Long")
+
+alertcondition(longCond, title="MA Cross Long", message='{"action":"buy","ticker":"{{ticker}}","price":{{close}},"strategy":"MA Crossover","time":"{{timenow}}"}')
+alertcondition(shortCond, title="MA Cross Flat", message='{"action":"sell","ticker":"{{ticker}}","price":{{close}},"strategy":"MA Crossover","time":"{{timenow}}"}')
+if longCond and useWebhook
+    alert('{"action":"buy","ticker":"' + syminfo.ticker + '","price":' + str.tostring(close) + ',"strategy":"MA Crossover","time":"' + str.tostring(timenow) + '"}', alert.freq_once_per_bar_close)
+if shortCond and useWebhook
+    alert('{"action":"sell","ticker":"' + syminfo.ticker + '","price":' + str.tostring(close) + ',"strategy":"MA Crossover","time":"' + str.tostring(timenow) + '"}', alert.freq_once_per_bar_close)

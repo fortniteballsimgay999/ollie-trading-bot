@@ -1,0 +1,27 @@
+//@version=5
+strategy("olliE Trend Pullback", overlay=true, default_qty_type=strategy.percent_of_equity, default_qty_value=10, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.1)
+
+trendLen = input.int(200, "Trend SMA", minval=20)
+rsiLen   = input.int(14, "RSI length", minval=2)
+rsiBuy   = input.int(35, "RSI buy", minval=5, maxval=50)
+rsiSell  = input.int(70, "RSI sell", minval=50, maxval=95)
+atrMult  = input.float(2.0, "ATR stop mult", minval=0.5, step=0.1)
+useWebhook = input.bool(true, "Send webhook JSON")
+
+sma = ta.sma(close, trendLen)
+rsi = ta.rsi(close, rsiLen)
+atr = ta.atr(14)
+uptrend = close > sma
+plot(sma, "Trend SMA", color=color.new(color.yellow, 0))
+
+longCond = uptrend and ta.crossover(rsi, rsiBuy)
+exitCond = ta.crossunder(rsi, rsiSell) or close < sma
+if longCond and strategy.position_size == 0
+    strategy.entry("Long", strategy.long)
+    strategy.exit("XL", from_entry="Long", stop=close - atrMult * atr)
+if exitCond and strategy.position_size > 0
+    strategy.close("Long")
+if longCond and strategy.position_size == 0 and useWebhook
+    alert('{"action":"buy","ticker":"' + syminfo.ticker + '","price":' + str.tostring(close) + ',"strategy":"Trend Pullback","time":"' + str.tostring(timenow) + '"}', alert.freq_once_per_bar_close)
+if exitCond and strategy.position_size > 0 and useWebhook
+    alert('{"action":"sell","ticker":"' + syminfo.ticker + '","price":' + str.tostring(close) + ',"strategy":"Trend Pullback","time":"' + str.tostring(timenow) + '"}', alert.freq_once_per_bar_close)

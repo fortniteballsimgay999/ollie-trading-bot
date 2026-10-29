@@ -1,0 +1,26 @@
+olliE Trading Desk + TradingView always-on
+==========================================
+
+TWO PATHS
+
+A) Research UI on your PC (Streamlit)
+   cd trading_bot
+   python -m pip install -r requirements.txt
+   python -m streamlit run app.py
+   Browser: http://localhost:8501
+
+B) Auto-trade from TradingView while PC is OFF
+   1. Deploy folder tradingview/ to Railway / Render / Fly
+      (see tradingview/ALWAYS_ON.md)
+   2. Public URL webhook = https://YOUR-APP/.../webhook
+   3. On TradingView: Pine Editor → paste ma_crossover.pine
+      (or donchian / trend_pullback) → Add to chart
+   4. Create Alert → Webhook URL = that public URL
+   5. Optional: BRIDGE_MODE=alpaca + Alpaca paper keys for real paper fills
+
+Files
+  app.py, engine.py, strategies/     research desk
+  tradingview/*.pine                 TV strategies
+  tradingview/webhook_bridge.py      receives TV alerts
+  tradingview/ALWAYS_ON.md           24/7 cloud deploy steps
+  tradingview/Procfile               Railway/Render start command
